@@ -1,0 +1,27 @@
+services:
+  recipe-extractor-v2:
+    build: .
+    container_name: recipe-extractor-v2
+    restart: unless-stopped
+    ports:
+      - "8090:8000"
+    volumes:
+      - ./app:/app
+      - whisper-cache-v2:/root/.cache/huggingface
+      - recipe-cache-v2:/app/data
+      - ./cookies.txt:/app/cookies.txt
+    environment:
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - WHISPER_DEVICE=cpu
+      - TANDOOR_URL=${TANDOOR_URL:-http://10.10.10.13:8082}
+      - TANDOOR_TOKEN=${TANDOOR_TOKEN:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 4G
+
+volumes:
+  whisper-cache-v2:
+  recipe-cache-v2:

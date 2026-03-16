@@ -1,0 +1,20 @@
+# Secrets
+.env
+cookies.txt
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Docker
+*.tar.gz
+
+# Cache / data (generated at runtime)
+app/data/
+
+# OS
+.DS_Store
+Thumbs.db
