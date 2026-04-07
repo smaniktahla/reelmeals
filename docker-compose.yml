@@ -1,0 +1,38 @@
+services:
+  reelmeals:
+    build: .
+    container_name: reelmeals-v4
+    restart: unless-stopped
+    ports:
+      - "8092:8000"
+    volumes:
+      - ./app:/app
+      - reelmeals-whisper:/root/.cache/huggingface
+      - reelmeals-data:/app/data
+    environment:
+      # Whisper (infrastructure — stays in .env)
+      - WHISPER_MODEL=${WHISPER_MODEL:-small}
+      - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      # Session signing key (generate once, keep secret)
+      - SECRET_KEY=${SECRET_KEY:-change-me-to-a-random-string}
+      # Auth modes
+      - AUTH_LOCAL=${AUTH_LOCAL:-true}
+      - AUTH_OIDC=${AUTH_OIDC:-false}
+      # OIDC config (only needed if AUTH_OIDC=true)
+      - OIDC_ISSUER=${OIDC_ISSUER:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
+      - OIDC_PROVIDER_NAME=${OIDC_PROVIDER_NAME:-SSO}
+      - OIDC_SCOPES=${OIDC_SCOPES:-openid profile email}
+      # Registration control
+      - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 4G
+
+volumes:
+  reelmeals-whisper:
+  reelmeals-data:

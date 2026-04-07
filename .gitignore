@@ -1,0 +1,6 @@
+.env
+cookies.txt
+__pycache__/
+*.pyc
+app/data/
+.DS_Store

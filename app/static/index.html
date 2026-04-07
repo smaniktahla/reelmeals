@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ReelMeals</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='32' fill='%23c0522a'/%3E%3Ctext x='32' y='44' text-anchor='middle' font-size='30' fill='white'%3E%F0%9F%8D%B4%3C/text%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --cream: #f7f2ea; --parchment: #ede5d4; --rust: #c0522a; --rust-dk: #9a3e1e;
+      --brown: #4a2e19; --tan: #9c7c55; --ink: #2a1f14; --muted: #7a6650;
+      --border: #d6c9b5; --success: #4a7c59; --error: #c0392b; --white: #fff;
+    }
+    html, body { min-height: 100vh; background: var(--cream); color: var(--ink); font-family: 'DM Sans', sans-serif; font-weight: 300; }
+    body::before { content:''; position:fixed; inset:0; background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 512 512' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.75' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E"); pointer-events:none; z-index:0; }
+
+    .page { position:relative; z-index:1; max-width:860px; margin:0 auto; padding:32px 20px 80px; }
+
+    /* ── Nav bar ── */
+    .navbar { display:flex; align-items:center; gap:12px; padding:10px 0 20px; border-bottom:1px solid var(--border); margin-bottom:28px; }
+    .nav-logo { display:flex; align-items:center; gap:10px; cursor:pointer; }
+    .nav-logo-dot { width:32px; height:32px; background:var(--rust); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:15px; }
+    .nav-title { font-family:'Playfair Display',serif; font-weight:700; font-size:1.3rem; color:var(--brown); }
+    .nav-spacer { flex:1; }
+    .nav-link { background:none; border:none; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:500; color:var(--muted); padding:6px 12px; border-radius:6px; transition:all 0.15s; }
+    .nav-link:hover { color:var(--brown); background:var(--parchment); }
+    .nav-link.active { color:var(--rust); background:rgba(192,82,42,0.08); }
+    .nav-user { font-size:0.82rem; color:var(--tan); font-weight:500; }
+
+    /* ── Cards ── */
+    .card { background:var(--white); border:1px solid var(--border); border-radius:12px; padding:28px 28px; box-shadow:0 2px 16px rgba(74,46,25,0.07); margin-bottom:24px; }
+    .card-title { font-family:'Playfair Display',serif; font-size:1.3rem; font-weight:700; color:var(--brown); margin-bottom:16px; }
+
+    /* ── Forms ── */
+    .field { margin-bottom:16px; }
+    .field-label { display:block; font-size:0.82rem; font-weight:500; color:var(--brown); margin-bottom:6px; }
+    .field-label small { font-weight:300; color:var(--muted); }
+    .field-input { width:100%; height:42px; padding:0 14px; border:1.5px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:var(--ink); background:var(--cream); outline:none; transition:border-color 0.2s; }
+    .field-input:focus { border-color:var(--rust); }
+    .field-input::placeholder { color:var(--muted); }
+    textarea.field-input { height:120px; padding:10px 14px; resize:vertical; font-size:0.82rem; font-family:monospace; }
+
+    .btn { height:44px; padding:0 22px; border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; font-weight:500; cursor:pointer; transition:all 0.15s; white-space:nowrap; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+    .btn-primary { background:var(--rust); color:var(--white); }
+    .btn-primary:hover:not(:disabled) { background:var(--rust-dk); }
+    .btn-primary:disabled { opacity:0.5; cursor:not-allowed; }
+    .btn-secondary { background:var(--parchment); color:var(--brown); border:1px solid var(--border); }
+    .btn-secondary:hover:not(:disabled) { background:var(--border); }
+    .btn-success { background:var(--success); color:var(--white); }
+    .btn-success:hover:not(:disabled) { filter:brightness(0.9); }
+    .btn-success:disabled { opacity:0.4; cursor:not-allowed; }
+    .btn-sm { height:34px; padding:0 14px; font-size:0.82rem; }
+    .btn-block { width:100%; }
+    .btn-oidc { background:var(--brown); color:var(--white); }
+    .btn-oidc:hover { filter:brightness(1.2); }
+
+    .btn-row { display:flex; gap:10px; flex-wrap:wrap; }
+    .divider { display:flex; align-items:center; gap:12px; margin:16px 0; font-size:0.78rem; color:var(--muted); }
+    .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+
+    /* ── Views ── */
+    .view { display:none; }
+    .view.active { display:block; }
+
+    /* ── Auth ── */
+    .auth-wrap { max-width:380px; margin:60px auto 0; }
+    .auth-wrap header { text-align:center; margin-bottom:32px; }
+    .auth-wrap .logo-mark { display:inline-block; width:52px; height:52px; background:var(--rust); border-radius:50%; position:relative; margin-bottom:14px; }
+    .auth-wrap .logo-mark::after { content:'🍴'; position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:22px; }
+    .auth-wrap h1 { font-family:'Playfair Display',serif; font-size:2rem; color:var(--brown); }
+    .auth-wrap h1 em { color:var(--rust); font-style:italic; }
+    .auth-wrap .tagline { color:var(--muted); font-size:0.9rem; margin-top:6px; }
+    .auth-toggle { text-align:center; margin-top:16px; font-size:0.85rem; color:var(--muted); }
+    .auth-toggle a { color:var(--rust); cursor:pointer; text-decoration:none; font-weight:500; }
+    .auth-toggle a:hover { text-decoration:underline; }
+    .auth-error { background:#fdf2f2; border:1px solid #f5c6c6; border-radius:8px; padding:10px 14px; color:var(--error); font-size:0.85rem; margin-bottom:14px; display:none; }
+    .auth-error.visible { display:block; }
+
+    /* ── Settings sections ── */
+    .settings-section { border-bottom:1px solid var(--border); padding-bottom:20px; margin-bottom:20px; }
+    .settings-section:last-child { border-bottom:none; margin-bottom:0; padding-bottom:0; }
+    .settings-section-title { font-family:'Playfair Display',serif; font-size:1rem; font-style:italic; color:var(--rust); margin-bottom:14px; }
+    .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    @media (max-width:560px) { .settings-grid { grid-template-columns:1fr; } }
+    .field-row { display:flex; gap:10px; align-items:flex-end; }
+    .field-row .field { flex:1; }
+    .key-status { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; vertical-align:middle; }
+    .key-status.configured { background:var(--success); }
+    .key-status.missing { background:var(--error); }
+
+    /* ── Library ── */
+    .library-bar { display:flex; gap:10px; align-items:center; margin-bottom:20px; }
+    .library-search { flex:1; height:42px; padding:0 14px; border:1.5px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.9rem; color:var(--ink); background:var(--cream); outline:none; }
+    .library-search:focus { border-color:var(--rust); }
+    .library-count { font-size:0.82rem; color:var(--muted); }
+    .recipe-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:16px; }
+    .recipe-card { background:var(--white); border:1px solid var(--border); border-radius:10px; overflow:hidden; cursor:pointer; transition:all 0.2s; }
+    .recipe-card:hover { border-color:var(--rust); box-shadow:0 4px 16px rgba(192,82,42,0.12); transform:translateY(-2px); }
+    .recipe-card-thumb { width:100%; height:140px; object-fit:cover; background:var(--parchment); display:block; }
+    .recipe-card-body { padding:12px 14px; }
+    .recipe-card-name { font-weight:500; font-size:0.92rem; color:var(--brown); line-height:1.3; margin-bottom:4px; }
+    .recipe-card-meta { font-size:0.75rem; color:var(--muted); }
+    .library-empty { text-align:center; padding:48px 20px; color:var(--muted); }
+    .library-empty p { margin-bottom:12px; }
+
+    /* ── Extract view ── */
+    .input-row { display:flex; gap:10px; }
+    .url-input { flex:1; height:50px; padding:0 16px; border:1.5px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.95rem; color:var(--ink); background:var(--cream); outline:none; transition:border-color 0.2s; }
+    .url-input:focus { border-color:var(--rust); }
+    .url-input::placeholder { color:var(--muted); }
+
+    /* Progress */
+    .progress-wrap { display:none; margin-top:24px; }
+    .progress-wrap.visible { display:block; }
+    .progress-label { display:flex; justify-content:space-between; font-size:0.82rem; color:var(--muted); margin-bottom:8px; }
+    .progress-bar-bg { height:6px; background:var(--parchment); border-radius:99px; overflow:hidden; }
+    .progress-bar-fill { height:100%; background:var(--rust); border-radius:99px; transition:width 0.5s; width:0%; }
+    .steps-list { display:flex; gap:0; margin-top:20px; position:relative; }
+    .steps-list::before { content:''; position:absolute; top:14px; left:14px; right:14px; height:2px; background:var(--border); }
+    .step-item { flex:1; display:flex; flex-direction:column; align-items:center; gap:6px; position:relative; z-index:1; }
+    .step-dot { width:28px; height:28px; border-radius:50%; background:var(--parchment); border:2px solid var(--border); display:flex; align-items:center; justify-content:center; font-size:12px; transition:all 0.3s; }
+    .step-item.active .step-dot { background:var(--rust); border-color:var(--rust); color:var(--white); }
+    .step-item.complete .step-dot { background:var(--success); border-color:var(--success); color:var(--white); }
+    .step-label { font-size:0.72rem; color:var(--muted); text-align:center; line-height:1.3; }
+    .step-item.active .step-label { color:var(--rust); font-weight:500; }
+    .step-item.complete .step-label { color:var(--success); }
+
+    .error-box { display:none; background:#fdf2f2; border:1px solid #f5c6c6; border-radius:8px; padding:14px 16px; color:var(--error); font-size:0.88rem; margin-top:16px; }
+    .error-box.visible { display:block; }
+
+    /* Recipe detail */
+    .recipe-header { border-bottom:1px solid var(--border); padding-bottom:20px; margin-bottom:24px; }
+    .recipe-title { font-family:'Playfair Display',serif; font-size:1.8rem; font-weight:700; color:var(--brown); line-height:1.2; }
+    .recipe-desc { margin-top:8px; color:var(--muted); font-size:0.9rem; line-height:1.6; }
+    .recipe-meta { display:flex; flex-wrap:wrap; gap:20px; margin-top:16px; }
+    .meta-item { display:flex; flex-direction:column; gap:2px; }
+    .meta-label { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:var(--tan); font-weight:500; }
+    .meta-value { font-size:0.92rem; font-weight:500; color:var(--brown); }
+    .section-title { font-family:'Playfair Display',serif; font-size:1.1rem; font-style:italic; color:var(--rust); margin-bottom:14px; }
+    .ingredients-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:8px; margin-bottom:28px; }
+    .ingredient-item { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px dashed var(--border); font-size:0.88rem; }
+    .ingredient-amount { font-weight:500; color:var(--rust); min-width:52px; text-align:right; flex-shrink:0; }
+    .ingredient-food { color:var(--ink); }
+    .ingredient-note { color:var(--muted); font-style:italic; font-size:0.82rem; }
+    .steps-ol { list-style:none; display:flex; flex-direction:column; gap:14px; margin-bottom:28px; }
+    .step-row { display:flex; gap:14px; align-items:flex-start; }
+    .step-num { width:28px; height:28px; background:var(--rust); color:var(--white); border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:0.78rem; font-weight:500; flex-shrink:0; margin-top:1px; }
+    .step-text { font-size:0.9rem; line-height:1.65; color:var(--ink); padding-top:4px; }
+    .step-time { font-size:0.75rem; color:var(--muted); margin-top:3px; }
+    .keywords { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px; }
+    .keyword-tag { background:var(--parchment); border:1px solid var(--border); border-radius:99px; padding:3px 12px; font-size:0.78rem; color:var(--brown); }
+    .action-row { display:flex; flex-wrap:wrap; gap:10px; padding-top:20px; border-top:1px solid var(--border); }
+    .recipe-thumb { width:100%; max-height:280px; object-fit:cover; border-radius:8px; margin-bottom:20px; display:none; }
+    .recipe-thumb.loaded { display:block; }
+    .back-link { display:inline-flex; align-items:center; gap:6px; font-size:0.85rem; color:var(--rust); cursor:pointer; margin-bottom:16px; font-weight:500; }
+    .back-link:hover { text-decoration:underline; }
+
+    /* Toast */
+    .toast { position:fixed; bottom:28px; right:28px; background:var(--brown); color:var(--white); padding:12px 20px; border-radius:8px; font-size:0.88rem; opacity:0; transform:translateY(12px); transition:all 0.3s; pointer-events:none; z-index:999; max-width:340px; }
+    .toast.show { opacity:1; transform:translateY(0); pointer-events:auto; }
+    .toast.error { background:var(--error); }
+    .toast.success { background:var(--success); }
+
+    .hint { font-size:0.78rem; color:var(--muted); margin-top:10px; line-height:1.5; }
+
+    @media (max-width:520px) { .input-row { flex-direction:column; } .settings-grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <!-- ═══════ AUTH VIEW ═══════ -->
+    <div id="view-auth" class="view">
+      <div class="auth-wrap">
+        <header>
+          <div class="logo-mark"></div>
+          <h1>Reel<em>Meals</em></h1>
+          <p class="tagline">Extract recipes from cooking videos</p>
+        </header>
+
+        <div id="auth-error" class="auth-error"></div>
+
+        <!-- Login form -->
+        <div id="auth-login" class="card">
+          <div class="card-title" id="auth-form-title">Sign in</div>
+          <div id="oidc-btn-wrap" style="display:none">
+            <button class="btn btn-oidc btn-block" onclick="oidcLogin()" id="oidc-btn">Sign in with SSO</button>
+            <div class="divider">or</div>
+          </div>
+          <div id="local-auth-form">
+            <div class="field">
+              <label class="field-label">Username</label>
+              <input id="auth-username" class="field-input" placeholder="username" autocomplete="username" />
+            </div>
+            <div class="field">
+              <label class="field-label">Password</label>
+              <input id="auth-password" class="field-input" type="password" placeholder="password" autocomplete="current-password" />
+            </div>
+            <div id="auth-extra-fields" style="display:none">
+              <div class="field">
+                <label class="field-label">Email <small>(optional)</small></label>
+                <input id="auth-email" class="field-input" type="email" placeholder="you@example.com" />
+              </div>
+              <div class="field">
+                <label class="field-label">Display name <small>(optional)</small></label>
+                <input id="auth-display" class="field-input" placeholder="Your Name" />
+              </div>
+            </div>
+            <button id="auth-submit" class="btn btn-primary btn-block" onclick="submitAuth()">Sign in</button>
+          </div>
+          <div class="auth-toggle" id="auth-toggle-wrap">
+            <span id="auth-toggle-text">No account?</span> <a onclick="toggleAuthMode()" id="auth-toggle-link">Create one</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═══════ MAIN APP ═══════ -->
+    <div id="app-main" style="display:none">
+      <!-- Navbar -->
+      <div class="navbar">
+        <div class="nav-logo" onclick="showView('extract')">
+          <div class="nav-logo-dot">🍴</div>
+          <span class="nav-title">ReelMeals</span>
+        </div>
+        <div class="nav-spacer"></div>
+        <button class="nav-link" id="nav-extract" onclick="showView('extract')">Extract</button>
+        <button class="nav-link" id="nav-library" onclick="showView('library')">Library</button>
+        <button class="nav-link" id="nav-settings" onclick="showView('settings')">Settings</button>
+        <button class="nav-link" id="nav-admin" onclick="showView('admin')" style="display:none">Admin</button>
+        <span class="nav-user" id="nav-username"></span>
+        <button class="nav-link" onclick="doLogout()">Logout</button>
+      </div>
+
+      <!-- ── Extract view ── -->
+      <div id="view-extract" class="view">
+        <div class="card">
+          <div class="input-row">
+            <input id="url-input" class="url-input" type="url" placeholder="Paste Facebook, Instagram, TikTok or YouTube URL…" autocomplete="off" />
+            <button id="extract-btn" class="btn btn-primary" onclick="startExtract()">Extract Recipe</button>
+          </div>
+          <p class="hint">Supports any yt-dlp compatible URL. Configure cookies in Settings for Facebook &amp; Instagram.</p>
+          <div id="progress-wrap" class="progress-wrap">
+            <div class="progress-label"><span id="step-label">Starting…</span><span id="pct-label">0%</span></div>
+            <div class="progress-bar-bg"><div id="progress-fill" class="progress-bar-fill"></div></div>
+            <div class="steps-list">
+              <div class="step-item" id="st-download"><div class="step-dot">↓</div><div class="step-label">Download</div></div>
+              <div class="step-item" id="st-transcribe"><div class="step-dot">🎙</div><div class="step-label">Transcribe</div></div>
+              <div class="step-item" id="st-ai"><div class="step-dot">✦</div><div class="step-label">AI Extract</div></div>
+              <div class="step-item" id="st-done"><div class="step-dot">✓</div><div class="step-label">Done</div></div>
+            </div>
+          </div>
+          <div id="error-box" class="error-box"></div>
+        </div>
+
+        <div id="recipe-section" style="display:none">
+          <div class="card">
+            <div class="recipe-header">
+              <img id="r-thumb" class="recipe-thumb" alt="" />
+              <div class="recipe-title" id="r-name"></div>
+              <div class="recipe-desc" id="r-desc"></div>
+              <div class="recipe-meta">
+                <div class="meta-item"><span class="meta-label">Servings</span><span class="meta-value" id="r-servings">—</span></div>
+                <div class="meta-item"><span class="meta-label">Prep</span><span class="meta-value" id="r-prep">—</span></div>
+                <div class="meta-item"><span class="meta-label">Cook</span><span class="meta-value" id="r-cook">—</span></div>
+              </div>
+            </div>
+            <div id="r-keywords-wrap"></div>
+            <div class="section-title">Ingredients</div>
+            <div class="ingredients-grid" id="r-ingredients"></div>
+            <div class="section-title">Method</div>
+            <ol class="steps-ol" id="r-steps"></ol>
+            <div class="action-row">
+              <button id="btn-push-tandoor" class="btn btn-success" onclick="pushToTandoor()" disabled style="display:none">⬆ Push to Tandoor</button>
+              <button id="btn-push-mealie" class="btn btn-success" onclick="pushToMealie()" disabled style="display:none">⬆ Push to Mealie</button>
+              <button id="btn-dl" class="btn btn-secondary" onclick="downloadZip()" disabled>↓ Download ZIP</button>
+              <button class="btn btn-secondary" onclick="resetExtract()">↺ New Recipe</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Library view ── -->
+      <div id="view-library" class="view">
+        <div class="library-bar">
+          <input class="library-search" id="library-search" placeholder="Search recipes…" oninput="searchLibrary()" />
+          <span class="library-count" id="library-count"></span>
+        </div>
+        <div id="library-grid" class="recipe-grid"></div>
+        <div id="library-empty" class="library-empty" style="display:none">
+          <p>Your recipe library is empty.</p>
+          <button class="btn btn-primary" onclick="showView('extract')">Extract your first recipe</button>
+        </div>
+      </div>
+
+      <!-- ── Recipe detail view ── -->
+      <div id="view-recipe-detail" class="view">
+        <span class="back-link" onclick="showView('library')">← Back to Library</span>
+        <div class="card" id="detail-card"></div>
+      </div>
+
+      <!-- ── Settings view ── -->
+      <div id="view-settings" class="view">
+        <div class="card">
+          <div class="card-title">Settings</div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">AI Provider</div>
+            <div class="field">
+              <label class="field-label">LLM Provider</label>
+              <select id="set-llm-provider" class="field-input" style="cursor:pointer">
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+              </select>
+            </div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label"><span class="key-status" id="ks-anthropic"></span> Anthropic API Key</label>
+                <input id="set-anthropic-key" class="field-input" type="password" placeholder="sk-ant-…" />
+              </div>
+              <div class="field">
+                <label class="field-label"><span class="key-status" id="ks-openai"></span> OpenAI API Key</label>
+                <input id="set-openai-key" class="field-input" type="password" placeholder="sk-…" />
+              </div>
+            </div>
+            <div class="field" style="max-width:280px">
+              <label class="field-label">OpenAI Model</label>
+              <input id="set-openai-model" class="field-input" value="gpt-4o" />
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Tandoor</div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">Tandoor URL</label>
+                <input id="set-tandoor-url" class="field-input" placeholder="http://your-server:8082" />
+              </div>
+              <div class="field">
+                <label class="field-label"><span class="key-status" id="ks-tandoor"></span> Tandoor Token</label>
+                <input id="set-tandoor-token" class="field-input" type="password" placeholder="tda_write_…" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Mealie</div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">Mealie URL</label>
+                <input id="set-mealie-url" class="field-input" placeholder="http://your-server:9925" />
+              </div>
+              <div class="field">
+                <label class="field-label"><span class="key-status" id="ks-mealie"></span> Mealie Token</label>
+                <input id="set-mealie-token" class="field-input" type="password" placeholder="eyJ…" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Cookies</div>
+            <p class="hint" style="margin-top:0;margin-bottom:10px">Paste Netscape-format cookies for Facebook/Instagram. Use a <a href="https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp" target="_blank">cookies.txt extension</a> to export them.</p>
+            <textarea id="set-cookies" class="field-input" placeholder="# Netscape HTTP Cookie File&#10;.facebook.com&#9;TRUE&#9;/&#9;TRUE&#9;0&#9;c_user&#9;12345…"></textarea>
+            <div class="hint" id="cookies-status"></div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;margin-top:8px">
+            <button class="btn btn-primary" onclick="saveAllSettings()">Save Settings</button>
+            <span style="font-size:0.78rem;color:var(--muted)" id="settings-version"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── Admin view ── -->
+      <div id="view-admin" class="view">
+        <div class="card">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+            <div class="card-title" style="margin-bottom:0">User Administration</div>
+            <button class="btn btn-primary btn-sm" onclick="toggleCreateUser()">+ New User</button>
+          </div>
+
+          <div id="admin-create-form" style="display:none;background:var(--parchment);border-radius:8px;padding:20px;margin-bottom:20px">
+            <div style="font-weight:500;color:var(--brown);margin-bottom:12px">Create New User</div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">Username</label>
+                <input id="admin-new-username" class="field-input" placeholder="username" />
+              </div>
+              <div class="field">
+                <label class="field-label">Password</label>
+                <input id="admin-new-password" class="field-input" type="password" placeholder="password" />
+              </div>
+              <div class="field">
+                <label class="field-label">Email <small>(optional)</small></label>
+                <input id="admin-new-email" class="field-input" type="email" placeholder="user@example.com" />
+              </div>
+              <div class="field">
+                <label class="field-label">Display Name <small>(optional)</small></label>
+                <input id="admin-new-display" class="field-input" placeholder="Full Name" />
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:4px">
+              <button class="btn btn-primary btn-sm" onclick="adminCreateUser()">Create</button>
+              <button class="btn btn-secondary btn-sm" onclick="toggleCreateUser()">Cancel</button>
+            </div>
+          </div>
+
+          <div id="admin-user-list"></div>
+        </div>
+
+        <div class="card" style="margin-top:24px">
+          <div class="card-title">Authentication Settings</div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">Auth Methods</div>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label" style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" id="adm-auth-local" style="width:auto;height:auto" /> Enable local login
+                </label>
+              </div>
+              <div class="field">
+                <label class="field-label" style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" id="adm-auth-oidc" style="width:auto;height:auto" /> Enable OIDC / SSO
+                </label>
+              </div>
+              <div class="field">
+                <label class="field-label" style="display:flex;align-items:center;gap:8px">
+                  <input type="checkbox" id="adm-allow-reg" style="width:auto;height:auto" /> Allow self-registration
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-section">
+            <div class="settings-section-title">OIDC / SSO Configuration</div>
+            <p class="hint" style="margin-top:0;margin-bottom:12px">Connect to Authentik, Keycloak, or any OpenID Connect provider. The .env file is used as a fallback if these fields are empty.</p>
+            <div class="settings-grid">
+              <div class="field">
+                <label class="field-label">Provider Name</label>
+                <input id="adm-oidc-name" class="field-input" placeholder="Authentik" />
+              </div>
+              <div class="field">
+                <label class="field-label">OIDC Issuer URL</label>
+                <input id="adm-oidc-issuer" class="field-input" placeholder="https://auth.example.com/application/o/reelmeals" />
+              </div>
+              <div class="field">
+                <label class="field-label">Client ID</label>
+                <input id="adm-oidc-client-id" class="field-input" placeholder="client-id-from-provider" />
+              </div>
+              <div class="field">
+                <label class="field-label"><span class="key-status" id="ks-oidc-secret"></span> Client Secret</label>
+                <input id="adm-oidc-secret" class="field-input" type="password" placeholder="client-secret" />
+              </div>
+              <div class="field">
+                <label class="field-label">Redirect URI</label>
+                <input id="adm-oidc-redirect" class="field-input" placeholder="http://your-server:8092/api/auth/oidc/callback" />
+              </div>
+              <div class="field">
+                <label class="field-label">Scopes</label>
+                <input id="adm-oidc-scopes" class="field-input" value="openid profile email" />
+              </div>
+            </div>
+          </div>
+
+          <button class="btn btn-primary" onclick="saveAdminAuthConfig()">Save Auth Settings</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    // ══════════════════════════════════════════════════════════════════════════
+    //  STATE
+    // ══════════════════════════════════════════════════════════════════════════
+    let appState = { user: null, authMode: 'login', currentView: 'extract' };
+    let currentJobId = null;
+    let currentSlug = null;
+    let pollTimer = null;
+    let appConfig = {};
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  INIT
+    // ══════════════════════════════════════════════════════════════════════════
+    (async function init() {
+      const res = await fetch('/api/auth/status');
+      const data = await res.json();
+      if (data.authenticated) {
+        appState.user = data;
+        enterApp();
+      } else {
+        showAuthView(data);
+      }
+    })();
+
+    function showAuthView(cfg) {
+      document.getElementById('view-auth').classList.add('active');
+      document.getElementById('app-main').style.display = 'none';
+      if (cfg.oidc_enabled) {
+        document.getElementById('oidc-btn-wrap').style.display = 'block';
+        document.getElementById('oidc-btn').textContent = 'Sign in with ' + (cfg.oidc_name || 'SSO');
+      }
+      if (!cfg.local_enabled) {
+        document.getElementById('local-auth-form').style.display = 'none';
+      }
+      if (!cfg.setup_complete) {
+        switchAuthMode('register');
+        document.getElementById('auth-toggle-wrap').style.display = 'none';
+        document.getElementById('auth-form-title').textContent = 'Create admin account';
+      }
+    }
+
+    async function enterApp() {
+      document.getElementById('view-auth').classList.remove('active');
+      document.getElementById('app-main').style.display = 'block';
+      document.getElementById('nav-username').textContent = appState.user.display_name || appState.user.user_id;
+      if (appState.user.is_admin) document.getElementById('nav-admin').style.display = '';
+      const cfg = await fetch('/api/config').then(r => r.json());
+      appConfig = cfg;
+      document.getElementById('settings-version').textContent = 'ReelMeals v' + (cfg.version || '4');
+      showView('extract');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  AUTH
+    // ══════════════════════════════════════════════════════════════════════════
+    function toggleAuthMode() {
+      switchAuthMode(appState.authMode === 'login' ? 'register' : 'login');
+    }
+
+    function switchAuthMode(mode) {
+      appState.authMode = mode;
+      document.getElementById('auth-extra-fields').style.display = mode === 'register' ? 'block' : 'none';
+      document.getElementById('auth-submit').textContent = mode === 'register' ? 'Create Account' : 'Sign in';
+      document.getElementById('auth-form-title').textContent = mode === 'register' ? 'Create account' : 'Sign in';
+      document.getElementById('auth-toggle-text').textContent = mode === 'register' ? 'Have an account?' : 'No account?';
+      document.getElementById('auth-toggle-link').textContent = mode === 'register' ? 'Sign in' : 'Create one';
+      document.getElementById('auth-error').classList.remove('visible');
+    }
+
+    async function submitAuth() {
+      const username = document.getElementById('auth-username').value.trim();
+      const password = document.getElementById('auth-password').value;
+      if (!username || !password) { showAuthError('Username and password required'); return; }
+
+      const endpoint = appState.authMode === 'register' ? '/api/auth/register' : '/api/auth/login';
+      const body = { username, password };
+      if (appState.authMode === 'register') {
+        body.email = document.getElementById('auth-email').value.trim();
+        body.display_name = document.getElementById('auth-display').value.trim();
+      }
+
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) { showAuthError(data.detail || 'Failed'); return; }
+        // Refresh status
+        const status = await fetch('/api/auth/status').then(r => r.json());
+        appState.user = status;
+        enterApp();
+      } catch (e) { showAuthError(e.message); }
+    }
+
+    function showAuthError(msg) {
+      const el = document.getElementById('auth-error');
+      el.textContent = msg;
+      el.classList.add('visible');
+    }
+
+    function oidcLogin() { window.location = '/api/auth/oidc/login'; }
+
+    async function doLogout() {
+      await fetch('/api/auth/logout', { method: 'POST' });
+      window.location.reload();
+    }
+
+    // Enter key on auth fields
+    document.getElementById('auth-password').addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); });
+    document.getElementById('auth-username').addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); });
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  NAVIGATION
+    // ══════════════════════════════════════════════════════════════════════════
+    function showView(name) {
+      appState.currentView = name;
+      ['extract','library','settings','recipe-detail','admin'].forEach(v => {
+        const el = document.getElementById('view-' + v);
+        if (el) el.classList.toggle('active', v === name);
+      });
+      ['extract','library','settings','admin'].forEach(n => {
+        const btn = document.getElementById('nav-' + n);
+        if (btn) btn.classList.toggle('active', n === name);
+      });
+      if (name === 'library') loadLibrary();
+      if (name === 'settings') loadSettingsForm();
+      if (name === 'admin') { loadAdminUsers(); loadAdminAuthConfig(); }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  LIBRARY
+    // ══════════════════════════════════════════════════════════════════════════
+    async function loadLibrary() {
+      const q = document.getElementById('library-search').value.trim();
+      const res = await fetch('/api/recipes' + (q ? '?q=' + encodeURIComponent(q) : ''));
+      const data = await res.json();
+      const grid = document.getElementById('library-grid');
+      const empty = document.getElementById('library-empty');
+      document.getElementById('library-count').textContent = data.total + ' recipe' + (data.total !== 1 ? 's' : '');
+
+      if (!data.recipes.length) {
+        grid.innerHTML = '';
+        empty.style.display = 'block';
+        return;
+      }
+      empty.style.display = 'none';
+      grid.innerHTML = data.recipes.reverse().map(r => `
+        <div class="recipe-card" onclick="openRecipe('${esc(r.slug)}')">
+          <img class="recipe-card-thumb" src="/api/recipes/${esc(r.slug)}/thumbnail" onerror="this.style.display='none'" loading="lazy" />
+          <div class="recipe-card-body">
+            <div class="recipe-card-name">${esc(r.name)}</div>
+            <div class="recipe-card-meta">${r.created_at ? new Date(r.created_at).toLocaleDateString() : ''}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function searchLibrary() { loadLibrary(); }
+
+    async function openRecipe(slug) {
+      const res = await fetch('/api/recipes/' + slug);
+      if (!res.ok) { showToast('Recipe not found', 'error'); return; }
+      const entry = await res.json();
+      currentSlug = slug;
+      renderRecipeDetail(entry);
+      showView('recipe-detail');
+    }
+
+    function renderRecipeDetail(entry) {
+      const r = entry.recipe;
+      const card = document.getElementById('detail-card');
+      const thumbHtml = entry.thumbnail_b64
+        ? `<img src="data:image/jpeg;base64,${entry.thumbnail_b64}" style="width:100%;max-height:280px;object-fit:cover;border-radius:8px;margin-bottom:20px" />`
+        : '';
+      const kw = (r.keywords || []).map(k => `<span class="keyword-tag">${esc(k)}</span>`).join('');
+      const ings = (r.ingredients || []).map(ing => {
+        const amt = ing.amount ? `${ing.amount} ${ing.unit || ''}`.trim() : '';
+        return `<div class="ingredient-item"><span class="ingredient-amount">${esc(amt)}</span><span><span class="ingredient-food">${esc(ing.food)}</span>${ing.note ? `<span class="ingredient-note"> — ${esc(ing.note)}</span>` : ''}</span></div>`;
+      }).join('');
+      const steps = (r.steps || []).map((s, i) => `
+        <li class="step-row"><div class="step-num">${i+1}</div><div><div class="step-text">${esc(s.text)}</div>${s.time ? `<div class="step-time">~${s.time} min</div>` : ''}</div></li>
+      `).join('');
+
+      card.innerHTML = `
+        <div class="recipe-header">
+          ${thumbHtml}
+          <div class="recipe-title">${esc(r.name)}</div>
+          <div class="recipe-desc">${esc(r.description || '')}</div>
+          <div class="recipe-meta">
+            <div class="meta-item"><span class="meta-label">Servings</span><span class="meta-value">${r.servings ? r.servings + ' servings' : '—'}</span></div>
+            <div class="meta-item"><span class="meta-label">Prep</span><span class="meta-value">${r.prepTime ? r.prepTime + ' min' : '—'}</span></div>
+            <div class="meta-item"><span class="meta-label">Cook</span><span class="meta-value">${r.cookTime ? r.cookTime + ' min' : '—'}</span></div>
+          </div>
+        </div>
+        ${kw ? `<div class="keywords">${kw}</div>` : ''}
+        <div class="section-title">Ingredients</div>
+        <div class="ingredients-grid">${ings}</div>
+        <div class="section-title">Method</div>
+        <ol class="steps-ol">${steps}</ol>
+        <div class="action-row">
+          ${appConfig.tandoor_enabled ? `<button class="btn btn-success" onclick="pushSlugToTandoor()">⬆ Push to Tandoor</button>` : ''}
+          ${appConfig.mealie_enabled ? `<button class="btn btn-success" onclick="pushSlugToMealie()">⬆ Push to Mealie</button>` : ''}
+          <button class="btn btn-secondary" onclick="window.location='/api/download/${esc(currentSlug)}'">↓ Download ZIP</button>
+          <button class="btn btn-secondary" style="color:var(--error);border-color:var(--error)" onclick="deleteCurrentRecipe()">✕ Delete</button>
+        </div>
+        ${entry.source_url ? `<div class="hint" style="margin-top:12px">Source: ${esc(entry.source_url)}</div>` : ''}
+      `;
+    }
+
+    async function pushSlugToTandoor() {
+      const res = await fetch('/api/push-to-tandoor', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({slug:currentSlug}) });
+      const data = await res.json();
+      if (data.success) { showToast('Pushed to Tandoor! 🎉','success'); if(data.url) setTimeout(()=>window.open(data.url,'_blank'),800); }
+      else showToast('Failed: '+(data.error||'unknown'),'error');
+    }
+
+    async function pushSlugToMealie() {
+      const res = await fetch('/api/push-to-mealie', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({slug:currentSlug}) });
+      const data = await res.json();
+      if (data.success) { showToast('Pushed to Mealie!','success'); if(data.url) setTimeout(()=>window.open(data.url,'_blank'),800); }
+      else showToast('Failed: '+(data.error||'unknown'),'error');
+    }
+
+    async function deleteCurrentRecipe() {
+      if (!confirm('Delete this recipe?')) return;
+      await fetch('/api/recipes/' + currentSlug, { method:'DELETE' });
+      showToast('Recipe deleted','success');
+      showView('library');
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  SETTINGS
+    // ══════════════════════════════════════════════════════════════════════════
+    async function loadSettingsForm() {
+      const res = await fetch('/api/settings');
+      const s = await res.json();
+      document.getElementById('set-llm-provider').value = s.llm_provider || 'anthropic';
+      document.getElementById('set-anthropic-key').value = s.anthropic_api_key || '';
+      document.getElementById('set-openai-key').value = s.openai_api_key || '';
+      document.getElementById('set-openai-model').value = s.openai_model || 'gpt-4o';
+      document.getElementById('set-tandoor-url').value = s.tandoor_url || '';
+      document.getElementById('set-tandoor-token').value = s.tandoor_token || '';
+      document.getElementById('set-mealie-url').value = s.mealie_url || '';
+      document.getElementById('set-mealie-token').value = s.mealie_token || '';
+      setKeyStatus('ks-anthropic', s.has_anthropic_key);
+      setKeyStatus('ks-openai', s.has_openai_key);
+      setKeyStatus('ks-tandoor', s.has_tandoor_token);
+      setKeyStatus('ks-mealie', s.has_mealie_token);
+
+      // Load cookies status
+      const cres = await fetch('/api/cookies');
+      const cdata = await cres.json();
+      document.getElementById('set-cookies').value = cdata.content || '';
+      document.getElementById('cookies-status').textContent = cdata.has_cookies
+        ? `✓ ${cdata.line_count} cookie entries loaded`
+        : 'No cookies configured';
+    }
+
+    function setKeyStatus(id, configured) {
+      const el = document.getElementById(id);
+      el.className = 'key-status ' + (configured ? 'configured' : 'missing');
+    }
+
+    async function saveAllSettings() {
+      const body = {
+        llm_provider: document.getElementById('set-llm-provider').value,
+        anthropic_api_key: document.getElementById('set-anthropic-key').value,
+        openai_api_key: document.getElementById('set-openai-key').value,
+        openai_model: document.getElementById('set-openai-model').value,
+        tandoor_url: document.getElementById('set-tandoor-url').value.replace(/\/$/,''),
+        tandoor_token: document.getElementById('set-tandoor-token').value,
+        mealie_url: document.getElementById('set-mealie-url').value.replace(/\/$/,''),
+        mealie_token: document.getElementById('set-mealie-token').value,
+      };
+      // Don't send masked values
+      for (const k of ['anthropic_api_key','openai_api_key','tandoor_token','mealie_token']) {
+        if (body[k] && body[k].includes('…')) delete body[k];
+      }
+
+      const res = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+
+      // Save cookies separately
+      const cookies = document.getElementById('set-cookies').value;
+      await fetch('/api/cookies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: cookies }),
+      });
+
+      // Refresh config
+      appConfig = await fetch('/api/config').then(r => r.json());
+
+      if (data.success) {
+        showToast('Settings saved!', 'success');
+        loadSettingsForm();
+      } else {
+        showToast('Failed to save', 'error');
+      }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  EXTRACT
+    // ══════════════════════════════════════════════════════════════════════════
+    const stepMap = [
+      { id:'st-download', max:39 }, { id:'st-transcribe', max:74 },
+      { id:'st-ai', max:99 }, { id:'st-done', max:100 },
+    ];
+
+    function updateStepIndicators(progress) {
+      stepMap.forEach(s => { const el=document.getElementById(s.id); el.classList.remove('active','complete'); });
+      let activated = false;
+      for (let i=stepMap.length-1; i>=0; i--) {
+        const s=stepMap[i], el=document.getElementById(s.id);
+        if (progress>=s.max) el.classList.add('complete');
+        else if (!activated) { el.classList.add('active'); activated=true; }
+      }
+    }
+
+    async function startExtract() {
+      const url = document.getElementById('url-input').value.trim();
+      if (!url) { showToast('Paste a video URL first.','error'); return; }
+      resetExtract(false);
+      document.getElementById('extract-btn').disabled = true;
+      document.getElementById('progress-wrap').classList.add('visible');
+      document.getElementById('error-box').classList.remove('visible');
+      try {
+        const res = await fetch('/api/extract', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({url}) });
+        const data = await res.json();
+        if (data.error) throw new Error(data.error);
+        currentJobId = data.job_id;
+        currentSlug = data.slug || null;
+        if (data.from_cache) {
+          showToast('⚡ Loaded from library!','success');
+          const sr = await fetch(`/api/status/${currentJobId}`).then(r=>r.json());
+          document.getElementById('step-label').textContent = sr.step;
+          document.getElementById('pct-label').textContent = '100%';
+          document.getElementById('progress-fill').style.width = '100%';
+          updateStepIndicators(100);
+          renderExtractedRecipe(sr.recipe, data.slug);
+        } else {
+          pollTimer = setInterval(poll, 1500);
+        }
+      } catch(e) { showError(e.message); document.getElementById('extract-btn').disabled=false; }
+    }
+
+    async function poll() {
+      if (!currentJobId) return;
+      try {
+        const res = await fetch(`/api/status/${currentJobId}`);
+        const data = await res.json();
+        document.getElementById('step-label').textContent = data.step || '…';
+        document.getElementById('pct-label').textContent = data.progress + '%';
+        document.getElementById('progress-fill').style.width = data.progress + '%';
+        updateStepIndicators(data.progress);
+        if (data.status === 'done') {
+          clearInterval(pollTimer);
+          currentSlug = data.slug || currentSlug;
+          renderExtractedRecipe(data.recipe, currentSlug);
+        } else if (data.status === 'error') {
+          clearInterval(pollTimer);
+          showError(data.error || 'Unknown error');
+          document.getElementById('extract-btn').disabled = false;
+        }
+      } catch(e) {}
+    }
+
+    function renderExtractedRecipe(r, slug) {
+      currentSlug = slug;
+      document.getElementById('r-name').textContent = r.name || 'Untitled';
+      document.getElementById('r-desc').textContent = r.description || '';
+      document.getElementById('r-servings').textContent = r.servings ? r.servings + ' servings' : '—';
+      document.getElementById('r-prep').textContent = r.prepTime ? r.prepTime + ' min' : '—';
+      document.getElementById('r-cook').textContent = r.cookTime ? r.cookTime + ' min' : '—';
+      const kw = r.keywords || [];
+      document.getElementById('r-keywords-wrap').innerHTML = kw.length ? `<div class="keywords">${kw.map(k=>`<span class="keyword-tag">${esc(k)}</span>`).join('')}</div>` : '';
+      document.getElementById('r-ingredients').innerHTML = (r.ingredients||[]).map(ing => {
+        const amt = ing.amount ? `${ing.amount} ${ing.unit||''}`.trim() : '';
+        return `<div class="ingredient-item"><span class="ingredient-amount">${esc(amt)}</span><span><span class="ingredient-food">${esc(ing.food)}</span>${ing.note?`<span class="ingredient-note"> — ${esc(ing.note)}</span>`:''}</span></div>`;
+      }).join('');
+      document.getElementById('r-steps').innerHTML = (r.steps||[]).map((s,i) => `<li class="step-row"><div class="step-num">${i+1}</div><div><div class="step-text">${esc(s.text)}</div>${s.time?`<div class="step-time">~${s.time} min</div>`:''}</div></li>`).join('');
+      document.getElementById('recipe-section').style.display = 'block';
+
+      // Thumbnail
+      const thumb = document.getElementById('r-thumb');
+      thumb.classList.remove('loaded');
+      if (currentJobId) {
+        const url = `/api/thumbnail/${currentJobId}`;
+        const img = new Image();
+        img.onload = () => { thumb.src = url; thumb.classList.add('loaded'); };
+        img.src = url;
+      }
+      // Buttons
+      if (appConfig.tandoor_enabled) { document.getElementById('btn-push-tandoor').style.display=''; document.getElementById('btn-push-tandoor').disabled=false; }
+      if (appConfig.mealie_enabled) { document.getElementById('btn-push-mealie').style.display=''; document.getElementById('btn-push-mealie').disabled=false; }
+      document.getElementById('btn-dl').disabled = false;
+      document.getElementById('extract-btn').disabled = false;
+      document.getElementById('recipe-section').scrollIntoView({ behavior:'smooth', block:'start' });
+    }
+
+    async function pushToTandoor() {
+      if (!currentSlug) return;
+      const btn = document.getElementById('btn-push-tandoor'); btn.disabled=true; btn.textContent='Pushing…';
+      const res = await fetch('/api/push-to-tandoor', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({slug:currentSlug}) });
+      const data = await res.json();
+      if (data.success) { showToast('Pushed to Tandoor! 🎉','success'); if(data.url) setTimeout(()=>window.open(data.url,'_blank'),800); }
+      else showToast('Failed: '+(data.error||'unknown'),'error');
+      btn.disabled=false; btn.textContent='⬆ Push to Tandoor';
+    }
+
+    async function pushToMealie() {
+      if (!currentSlug) return;
+      const btn = document.getElementById('btn-push-mealie'); btn.disabled=true; btn.textContent='Pushing…';
+      const res = await fetch('/api/push-to-mealie', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({slug:currentSlug}) });
+      const data = await res.json();
+      if (data.success) { showToast('Pushed to Mealie!','success'); if(data.url) setTimeout(()=>window.open(data.url,'_blank'),800); }
+      else showToast('Failed: '+(data.error||'unknown'),'error');
+      btn.disabled=false; btn.textContent='⬆ Push to Mealie';
+    }
+
+    function downloadZip() {
+      if (currentSlug) window.location = `/api/download/${currentSlug}`;
+    }
+
+    function resetExtract(clearInput = true) {
+      if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+      currentJobId = null;
+      if (clearInput) document.getElementById('url-input').value = '';
+      document.getElementById('progress-wrap').classList.remove('visible');
+      document.getElementById('recipe-section').style.display = 'none';
+      document.getElementById('error-box').classList.remove('visible');
+      document.getElementById('progress-fill').style.width = '0%';
+      document.getElementById('pct-label').textContent = '0%';
+      document.getElementById('step-label').textContent = 'Starting…';
+      document.getElementById('btn-push-tandoor').disabled=true; document.getElementById('btn-push-tandoor').style.display='none';
+      document.getElementById('btn-push-mealie').disabled=true; document.getElementById('btn-push-mealie').style.display='none';
+      document.getElementById('btn-dl').disabled = true;
+      const th = document.getElementById('r-thumb'); if(th){th.src='';th.classList.remove('loaded');}
+      stepMap.forEach(s => document.getElementById(s.id).classList.remove('active','complete'));
+    }
+
+    function showError(msg) { const el=document.getElementById('error-box'); el.textContent='⚠ '+msg; el.classList.add('visible'); }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  UTILS
+    // ══════════════════════════════════════════════════════════════════════════
+    function showToast(msg, type='') {
+      const t=document.getElementById('toast'); t.textContent=msg;
+      t.className='toast show'+(type?' '+type:'');
+      clearTimeout(t._timer);
+      t._timer=setTimeout(()=>{t.className='toast';},type==='error'?8000:4500);
+      t.onclick=()=>{t.className='toast';clearTimeout(t._timer);};
+    }
+
+    function esc(s) { return String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+    document.getElementById('url-input').addEventListener('keydown', e => { if(e.key==='Enter') startExtract(); });
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  ADMIN
+    // ══════════════════════════════════════════════════════════════════════════
+    async function loadAdminUsers() {
+      const res = await fetch('/api/admin/users');
+      if (!res.ok) { document.getElementById('admin-user-list').innerHTML = '<p style="color:var(--error)">Access denied</p>'; return; }
+      const data = await res.json();
+      const list = document.getElementById('admin-user-list');
+      if (!data.users.length) { list.innerHTML = '<p>No users.</p>'; return; }
+      list.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;font-size:0.88rem">
+          <thead>
+            <tr style="border-bottom:2px solid var(--border);text-align:left">
+              <th style="padding:8px 10px;color:var(--tan);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:500">User</th>
+              <th style="padding:8px 10px;color:var(--tan);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:500">Email</th>
+              <th style="padding:8px 10px;color:var(--tan);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:500">Recipes</th>
+              <th style="padding:8px 10px;color:var(--tan);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:500">Role</th>
+              <th style="padding:8px 10px;color:var(--tan);font-size:0.75rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:500">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.users.map(u => `
+              <tr style="border-bottom:1px solid var(--border)">
+                <td style="padding:10px 10px">
+                  <div style="font-weight:500;color:var(--brown)">${esc(u.display_name)}</div>
+                  <div style="font-size:0.78rem;color:var(--muted)">${esc(u.username)}</div>
+                </td>
+                <td style="padding:10px 10px;color:var(--muted)">${esc(u.email || '—')}</td>
+                <td style="padding:10px 10px">${u.recipe_count}</td>
+                <td style="padding:10px 10px">
+                  <span style="display:inline-block;padding:2px 10px;border-radius:99px;font-size:0.75rem;font-weight:500;${u.is_admin ? 'background:#e8f4ec;color:var(--success)' : 'background:var(--parchment);color:var(--muted)'}">
+                    ${u.is_admin ? 'Admin' : 'User'}
+                  </span>
+                </td>
+                <td style="padding:10px 10px">
+                  <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <button class="btn btn-sm btn-secondary" onclick="adminToggleAdmin('${esc(u.user_id)}')">${u.is_admin ? 'Remove Admin' : 'Make Admin'}</button>
+                    <button class="btn btn-sm btn-secondary" onclick="adminResetPassword('${esc(u.user_id)}')">Reset PW</button>
+                    ${u.user_id !== appState.user.user_id ? `<button class="btn btn-sm btn-secondary" style="color:var(--error);border-color:var(--error)" onclick="adminDeleteUser('${esc(u.user_id)}','${esc(u.display_name)}')">Delete</button>` : ''}
+                  </div>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    async function adminToggleAdmin(uid) {
+      const res = await fetch(`/api/admin/users/${uid}/toggle-admin`, { method:'POST' });
+      const data = await res.json();
+      if (data.success) { showToast(data.is_admin ? 'Admin granted' : 'Admin removed', 'success'); loadAdminUsers(); }
+      else showToast(data.detail || 'Failed', 'error');
+    }
+
+    async function adminResetPassword(uid) {
+      const pw = prompt('New password for ' + uid + ':');
+      if (!pw) return;
+      const res = await fetch(`/api/admin/users/${uid}/reset-password`, {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({password:pw})
+      });
+      const data = await res.json();
+      if (data.success) showToast('Password reset', 'success');
+      else showToast(data.detail || 'Failed', 'error');
+    }
+
+    async function adminDeleteUser(uid, name) {
+      if (!confirm(`Delete user "${name}" and all their recipes? This cannot be undone.`)) return;
+      const res = await fetch(`/api/admin/users/${uid}`, { method:'DELETE' });
+      const data = await res.json();
+      if (data.success) { showToast('User deleted', 'success'); loadAdminUsers(); }
+      else showToast(data.detail || 'Failed', 'error');
+    }
+
+    function toggleCreateUser() {
+      const form = document.getElementById('admin-create-form');
+      form.style.display = form.style.display === 'none' ? 'block' : 'none';
+      if (form.style.display === 'none') {
+        document.getElementById('admin-new-username').value = '';
+        document.getElementById('admin-new-password').value = '';
+        document.getElementById('admin-new-email').value = '';
+        document.getElementById('admin-new-display').value = '';
+      }
+    }
+
+    async function adminCreateUser() {
+      const username = document.getElementById('admin-new-username').value.trim();
+      const password = document.getElementById('admin-new-password').value;
+      if (!username || !password) { showToast('Username and password required', 'error'); return; }
+      const body = {
+        username,
+        password,
+        email: document.getElementById('admin-new-email').value.trim(),
+        display_name: document.getElementById('admin-new-display').value.trim(),
+      };
+      const res = await fetch('/api/admin/create-user', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        showToast('User created', 'success');
+        toggleCreateUser();
+        loadAdminUsers();
+      } else {
+        showToast(data.detail || 'Failed to create user', 'error');
+      }
+    }
+
+    async function loadAdminAuthConfig() {
+      const res = await fetch('/api/admin/auth-config');
+      if (!res.ok) return;
+      const c = await res.json();
+      document.getElementById('adm-auth-local').checked = c.auth_local;
+      document.getElementById('adm-auth-oidc').checked = c.auth_oidc;
+      document.getElementById('adm-allow-reg').checked = c.allow_registration;
+      document.getElementById('adm-oidc-name').value = c.oidc_provider_name || '';
+      document.getElementById('adm-oidc-issuer').value = c.oidc_issuer || '';
+      document.getElementById('adm-oidc-client-id').value = c.oidc_client_id || '';
+      document.getElementById('adm-oidc-secret').value = c.oidc_client_secret || '';
+      document.getElementById('adm-oidc-redirect').value = c.oidc_redirect_uri || '';
+      document.getElementById('adm-oidc-scopes').value = c.oidc_scopes || 'openid profile email';
+      setKeyStatus('ks-oidc-secret', c.has_oidc_secret);
+    }
+
+    async function saveAdminAuthConfig() {
+      const body = {
+        auth_local: document.getElementById('adm-auth-local').checked,
+        auth_oidc: document.getElementById('adm-auth-oidc').checked,
+        allow_registration: document.getElementById('adm-allow-reg').checked,
+        oidc_provider_name: document.getElementById('adm-oidc-name').value.trim(),
+        oidc_issuer: document.getElementById('adm-oidc-issuer').value.trim(),
+        oidc_client_id: document.getElementById('adm-oidc-client-id').value.trim(),
+        oidc_client_secret: document.getElementById('adm-oidc-secret').value,
+        oidc_redirect_uri: document.getElementById('adm-oidc-redirect').value.trim(),
+        oidc_scopes: document.getElementById('adm-oidc-scopes').value.trim(),
+      };
+      // Don't send masked secret
+      if (body.oidc_client_secret && body.oidc_client_secret.includes('…')) delete body.oidc_client_secret;
+
+      const res = await fetch('/api/admin/auth-config', {
+        method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Auth settings saved! Changes take effect immediately.', 'success');
+        loadAdminAuthConfig();
+      } else {
+        showToast('Failed to save', 'error');
+      }
+    }
+  </script>
+</body>
+</html>
