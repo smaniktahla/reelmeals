@@ -12,6 +12,7 @@ Paste a Facebook, Instagram, TikTok, YouTube, or any yt-dlp-supported URL — th
 - **Settings in the UI** — API keys, Tandoor/Mealie config, and cookies all managed from the browser
 - **OIDC support** — optional SSO via Authentik, Keycloak, or any OpenID Connect provider
 - **Local auth** — simple username/password with first-user-is-admin
+- Simple text paste box to parse recipes from social media comments
 
 ## Quick Start
 
