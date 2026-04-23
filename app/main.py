@@ -20,10 +20,12 @@ import integrations
 import pipeline
 import recipes
 import users
+from text_import import router as text_import_router
 
 APP_VERSION = "4.0.0"
 
 app = FastAPI(title="ReelMeals")
+app.include_router(text_import_router)
 
 
 # ── Startup ────────────────────────────────────────────────────────────────────
@@ -274,6 +276,31 @@ async def list_recipes(request: Request, q: str = ""):
     return {"recipes": items, "total": len(items)}
 
 
+class TextRecipeCreate(BaseModel):
+    title: str = ""
+    name: str = ""
+    description: str = ""
+    servings: int | None = None
+    prep_time: int | None = None
+    cook_time: int | None = None
+    total_time: int | None = None
+    source: str = ""
+    ingredients: list = []
+    steps: list = []
+    tags: list = []
+
+
+@app.post("/api/recipes")
+async def create_recipe(req: TextRecipeCreate, request: Request):
+    user_id = auth.require_user(request)
+    # Normalize: text_import uses "title", pipeline uses "name"
+    recipe_dict = req.model_dump()
+    if not recipe_dict.get("name") and recipe_dict.get("title"):
+        recipe_dict["name"] = recipe_dict["title"]
+    slug = recipes.save_recipe(user_id, recipe_dict, source_url="")
+    return {"slug": slug, "id": slug}
+
+
 @app.get("/api/recipes/{slug}")
 async def get_recipe(slug: str, request: Request):
     user_id = auth.require_user(request)
@@ -386,7 +413,6 @@ async def get_thumbnail(job_id: str):
     if not job or not job.get("thumbnail"):
         return StreamingResponse(io.BytesIO(b""), media_type="image/jpeg", status_code=404)
     return StreamingResponse(io.BytesIO(job["thumbnail"]), media_type="image/jpeg")
-
 
 # ── Push routes ────────────────────────────────────────────────────────────────
 @app.post("/api/push-to-tandoor")

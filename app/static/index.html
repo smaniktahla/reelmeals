@@ -168,6 +168,32 @@
     .hint { font-size:0.78rem; color:var(--muted); margin-top:10px; line-height:1.5; }
 
     @media (max-width:520px) { .input-row { flex-direction:column; } .settings-grid { grid-template-columns:1fr; } }
+
+    /* ── Import mode tabs ── */
+    .import-tabs { display:flex; gap:0; margin-bottom:16px; border-bottom:2px solid var(--border); }
+    .import-tab { padding:7px 18px; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-2px; cursor:pointer; font-family:'DM Sans',sans-serif; font-size:0.85rem; font-weight:500; color:var(--muted); transition:color 0.15s, border-color 0.15s; }
+    .import-tab.active { color:var(--rust); border-bottom-color:var(--rust); }
+    .import-tab:hover:not(.active) { color:var(--brown); }
+    .import-panel { display:none; }
+    .import-panel.active { display:block; }
+
+    /* ── Paste textarea ── */
+    .paste-input { width:100%; min-height:200px; padding:12px 14px; border:1.5px solid var(--border); border-radius:8px; font-family:'DM Sans',sans-serif; font-size:0.88rem; line-height:1.6; resize:vertical; background:var(--cream); color:var(--ink); outline:none; transition:border-color 0.2s; }
+    .paste-input:focus { border-color:var(--rust); }
+    .paste-input::placeholder { color:var(--muted); }
+
+    /* ── Parse preview ── */
+    .parse-preview { display:none; margin-top:18px; padding:16px; background:var(--parchment); border:1px solid var(--border); border-radius:10px; }
+    .parse-preview-title { font-family:'Playfair Display',serif; font-size:1.1rem; font-weight:700; color:var(--brown); margin-bottom:4px; }
+    .parse-preview-meta { font-size:0.78rem; color:var(--tan); margin-bottom:8px; }
+    .parse-warning { background:#fef9c3; border:1px solid #fde68a; border-radius:6px; padding:8px 12px; color:#92400e; font-size:0.8rem; margin-bottom:10px; }
+    .parse-counts { font-size:0.82rem; color:var(--muted); margin-bottom:14px; }
+
+    /* ── Spinner ── */
+    .parse-spinner { display:none; align-items:center; gap:8px; color:var(--muted); font-size:0.85rem; margin-top:10px; }
+    .parse-spinner.active { display:flex; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .spin-icon { width:15px; height:15px; border:2px solid var(--border); border-top-color:var(--rust); border-radius:50%; animation:spin 0.7s linear infinite; flex-shrink:0; }
   </style>
 </head>
 <body>
@@ -239,11 +265,42 @@
       <!-- ── Extract view ── -->
       <div id="view-extract" class="view">
         <div class="card">
-          <div class="input-row">
-            <input id="url-input" class="url-input" type="url" placeholder="Paste Facebook, Instagram, TikTok or YouTube URL…" autocomplete="off" />
-            <button id="extract-btn" class="btn btn-primary" onclick="startExtract()">Extract Recipe</button>
+          <!-- Import mode tabs -->
+          <div class="import-tabs">
+            <button class="import-tab active" data-tab="url" onclick="switchImportTab('url')">🔗 From URL</button>
+            <button class="import-tab" data-tab="paste" onclick="switchImportTab('paste')">📋 Paste Text</button>
           </div>
-          <p class="hint">Supports any yt-dlp compatible URL. Configure cookies in Settings for Facebook &amp; Instagram.</p>
+
+          <!-- URL panel (existing) -->
+          <div class="import-panel active" id="import-panel-url">
+            <div class="input-row">
+              <input id="url-input" class="url-input" type="url" placeholder="Paste Facebook, Instagram, TikTok or YouTube URL…" autocomplete="off" />
+              <button id="extract-btn" class="btn btn-primary" onclick="startExtract()">Extract Recipe</button>
+            </div>
+            <p class="hint">Supports any yt-dlp compatible URL. Configure cookies in Settings for Facebook &amp; Instagram.</p>
+          </div>
+
+          <!-- Paste text panel (new) -->
+          <div class="import-panel" id="import-panel-paste">
+            <textarea id="paste-input" class="paste-input" placeholder="Paste the full recipe text here — any format (social media post, blog copy, notes)…"></textarea>
+            <div style="display:flex;gap:10px;align-items:center;margin-top:10px">
+              <button class="btn btn-primary" onclick="startTextParse()">✨ Parse Recipe</button>
+              <button class="btn btn-secondary" onclick="clearPastePanel()">Clear</button>
+            </div>
+            <div class="parse-spinner" id="parse-spinner"><div class="spin-icon"></div>Parsing with Claude…</div>
+            <div class="parse-preview" id="parse-preview">
+              <div class="parse-warning" id="parse-warning" style="display:none"></div>
+              <div class="parse-preview-title" id="pp-title"></div>
+              <div class="parse-preview-meta" id="pp-meta"></div>
+              <div class="parse-counts" id="pp-counts"></div>
+              <div class="btn-row">
+                <button class="btn btn-success btn-sm" onclick="saveParsedRecipe()">Save to Library</button>
+                <button class="btn btn-secondary btn-sm" onclick="discardParsed()">Discard</button>
+              </div>
+            </div>
+            <div id="paste-error-box" class="error-box"></div>
+          </div>
+
           <div id="progress-wrap" class="progress-wrap">
             <div class="progress-label"><span id="step-label">Starting…</span><span id="pct-label">0%</span></div>
             <div class="progress-bar-bg"><div id="progress-fill" class="progress-bar-fill"></div></div>
@@ -1088,6 +1145,111 @@
       } else {
         showToast('Failed to save', 'error');
       }
+    }
+
+    // ══════════════════════════════════════════════════════════════════════════
+    //  TEXT IMPORT
+    // ══════════════════════════════════════════════════════════════════════════
+    let parsedRecipe = null;
+
+    function switchImportTab(tab) {
+      document.querySelectorAll('.import-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      document.querySelectorAll('.import-panel').forEach(p => p.classList.toggle('active', p.id === 'import-panel-' + tab));
+      // Hide progress/error when switching tabs
+      document.getElementById('progress-wrap').classList.remove('visible');
+      document.getElementById('error-box').classList.remove('visible');
+    }
+
+    async function startTextParse() {
+      const raw = document.getElementById('paste-input').value.trim();
+      if (!raw) { showPasteError('Please paste some recipe text first.'); return; }
+
+      hidePasteError();
+      document.getElementById('parse-preview').style.display = 'none';
+      document.getElementById('parse-spinner').classList.add('active');
+      parsedRecipe = null;
+
+      try {
+        const resp = await fetch('/api/recipes/import-text', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ raw_text: raw }),
+          credentials: 'same-origin',
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Parse failed.');
+
+        parsedRecipe = data.recipe;
+
+        // Populate preview
+        document.getElementById('pp-title').textContent = parsedRecipe.title || '(untitled)';
+
+        const meta = [];
+        if (parsedRecipe.servings) meta.push(parsedRecipe.servings + ' servings');
+        if (parsedRecipe.prep_time) meta.push(parsedRecipe.prep_time + ' min prep');
+        if (parsedRecipe.cook_time) meta.push(parsedRecipe.cook_time + ' min cook');
+        if (parsedRecipe.tags && parsedRecipe.tags.length) meta.push(parsedRecipe.tags.join(', '));
+        document.getElementById('pp-meta').textContent = meta.join(' · ');
+
+        document.getElementById('pp-counts').textContent =
+          (parsedRecipe.ingredients || []).length + ' ingredients · ' +
+          (parsedRecipe.steps || []).length + ' steps';
+
+        const warnEl = document.getElementById('parse-warning');
+        if (data.warnings && data.warnings.length) {
+          warnEl.textContent = '⚠ ' + data.warnings.join(' · ');
+          warnEl.style.display = 'block';
+        } else {
+          warnEl.style.display = 'none';
+        }
+
+        document.getElementById('parse-preview').style.display = 'block';
+      } catch (err) {
+        showPasteError(err.message);
+      } finally {
+        document.getElementById('parse-spinner').classList.remove('active');
+      }
+    }
+
+    async function saveParsedRecipe() {
+      if (!parsedRecipe) return;
+      try {
+        const resp = await fetch('/api/recipes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(parsedRecipe),
+          credentials: 'same-origin',
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.detail || 'Save failed.');
+        showToast('Recipe saved!', 'success');
+        discardParsed();
+        showView('library');
+        loadLibrary();
+      } catch (err) {
+        showPasteError(err.message);
+      }
+    }
+
+    function discardParsed() {
+      parsedRecipe = null;
+      document.getElementById('parse-preview').style.display = 'none';
+      document.getElementById('paste-input').value = '';
+      hidePasteError();
+    }
+
+    function clearPastePanel() {
+      discardParsed();
+    }
+
+    function showPasteError(msg) {
+      const el = document.getElementById('paste-error-box');
+      el.textContent = msg;
+      el.classList.add('visible');
+    }
+
+    function hidePasteError() {
+      document.getElementById('paste-error-box').classList.remove('visible');
     }
   </script>
 </body>

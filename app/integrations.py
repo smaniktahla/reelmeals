@@ -7,12 +7,74 @@ import httpx
 
 
 # ── Tandoor ────────────────────────────────────────────────────────────────────
+def _to_float(val) -> float:
+    """Coerce ingredient amounts (including unicode fractions) to float.
+
+    Handles: plain numbers, unicode fractions (½ ⅔ ¼ etc.),
+    compound values like "1½", "2⅔", and slash fractions like "1/2".
+    """
+    if isinstance(val, (int, float)):
+        return float(val)
+
+    s = str(val).strip()
+    if not s:
+        return 0.0
+
+    # Unicode fraction character values
+    UNICODE_FRACTIONS = {
+        "½": 0.5,        # ½
+        "⅓": 1/3,        # ⅓
+        "⅔": 2/3,        # ⅔
+        "¼": 0.25,       # ¼
+        "¾": 0.75,       # ¾
+        "⅛": 0.125,      # ⅛
+        "⅜": 0.375,      # ⅜
+        "⅝": 0.625,      # ⅝
+        "⅞": 0.875,      # ⅞
+        "⅕": 0.2,        # ⅕
+        "⅖": 0.4,        # ⅖
+        "⅗": 0.6,        # ⅗
+        "⅘": 0.8,        # ⅘
+        "⅙": 1/6,        # ⅙
+        "⅚": 5/6,        # ⅚
+    }
+
+    # Check if the whole string is a unicode fraction
+    if s in UNICODE_FRACTIONS:
+        return UNICODE_FRACTIONS[s]
+
+    # Check for compound: whole number + unicode fraction e.g. "1½", "2⅔"
+    for frac_char, frac_val in UNICODE_FRACTIONS.items():
+        if s.endswith(frac_char):
+            whole_part = s[:-len(frac_char)].strip()
+            if whole_part:
+                try:
+                    return float(whole_part) + frac_val
+                except ValueError:
+                    pass
+
+    # Handle slash fractions e.g. "1/2", "3/4"
+    if "/" in s:
+        parts = s.split("/")
+        if len(parts) == 2:
+            try:
+                return float(parts[0].strip()) / float(parts[1].strip())
+            except (ValueError, ZeroDivisionError):
+                pass
+
+    # Plain number
+    try:
+        return float(s)
+    except (ValueError, TypeError):
+        return 0.0
+
+
 def _build_tandoor_ingredients(recipe: dict) -> list:
     return [
         {
             "food":      {"name": ing["food"]},
             "unit":      {"name": ing["unit"]} if ing.get("unit") else None,
-            "amount":    ing.get("amount", 0),
+            "amount":    _to_float(ing.get("amount", 0)),
             "note":      ing.get("note", ""),
             "order":     0,
             "is_header": False,
@@ -57,7 +119,7 @@ async def push_to_tandoor(recipe: dict, thumbnail: bytes | None,
     payload = {
         "name":         recipe["name"],
         "description":  recipe.get("description", ""),
-        "servings":     recipe.get("servings", 4),
+        "servings":     recipe.get("servings") or 4,
         "working_time": recipe.get("prepTime", 0),
         "waiting_time": recipe.get("cookTime", 0),
         "keywords":     [{"name": k} for k in recipe.get("keywords", [])],
