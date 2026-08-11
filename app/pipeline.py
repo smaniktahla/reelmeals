@@ -16,6 +16,15 @@ from faster_whisper import WhisperModel
 WHISPER_MODEL_SIZE = os.getenv("WHISPER_MODEL", "small")
 WHISPER_DEVICE     = os.getenv("WHISPER_DEVICE", "cpu")
 
+# ── Local LLM setup ─────────────────────────────────────────────────────────────
+# Points at AI1's dedicated llama-server (real 32K context), not Ollama's
+# default instance on AI2 — that one silently caps total context at 4096
+# tokens regardless of the max_tokens requested, which isn't enough for a
+# reasoning model to both "think" through a full transcript and emit the
+# recipe JSON.
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://10.10.10.105:8081/v1")
+OLLAMA_MODEL    = os.getenv("OLLAMA_MODEL", "qwen35-4b")
+
 whisper_model: WhisperModel | None = None
 
 
@@ -141,7 +150,11 @@ async def _extract_audio(video_path: str, tmpdir: str) -> str:
 # ── Transcription ──────────────────────────────────────────────────────────────
 def _transcribe(audio_path: str) -> str:
     segments, _ = whisper_model.transcribe(audio_path, beam_size=5, language="en")
-    return " ".join(s.text.strip() for s in segments)
+    text = " ".join(s.text.strip() for s in segments)
+    print(f"[whisper] Transcript length: {len(text)} chars")
+    if len(text) < 20:
+        print(f"[whisper] WARNING: Very short transcript: '{text}'")
+    return text
 
 
 # ── LLM recipe parsing ────────────────────────────────────────────────────────
@@ -180,6 +193,8 @@ async def _parse_recipe(transcript: str, llm_settings: dict) -> dict:
     provider = llm_settings.get("llm_provider", "anthropic")
     if provider == "openai":
         return await _parse_openai(transcript, llm_settings)
+    if provider == "local":
+        return await _parse_local(transcript, llm_settings)
     return await _parse_anthropic(transcript, llm_settings)
 
 
@@ -187,6 +202,8 @@ async def _parse_anthropic(transcript: str, llm_settings: dict) -> dict:
     api_key = llm_settings.get("anthropic_api_key", "")
     if not api_key:
         raise RuntimeError("Anthropic API key not configured. Go to Settings to add it.")
+    if not transcript or len(transcript.strip()) < 10:
+        raise RuntimeError(f"Transcript is empty or too short ({len(transcript)} chars). The video may have no speech audio, or cookies may be needed for this site.")
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -195,6 +212,9 @@ async def _parse_anthropic(transcript: str, llm_settings: dict) -> dict:
     )
     raw = message.content[0].text.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
+    print(f"[llm] Response length: {len(raw)} chars, starts with: {raw[:80]!r}")
+    if not raw:
+        raise RuntimeError("LLM returned an empty response. The transcript may not contain a recipe.")
     return json.loads(raw)
 
 
@@ -215,4 +235,28 @@ async def _parse_openai(transcript: str, llm_settings: dict) -> dict:
     )
     raw = response.choices[0].message.content.strip()
     raw = raw.replace("```json", "").replace("```", "").strip()
+    return json.loads(raw)
+
+
+async def _parse_local(transcript: str, llm_settings: dict) -> dict:
+    if not transcript or len(transcript.strip()) < 10:
+        raise RuntimeError(f"Transcript is empty or too short ({len(transcript)} chars). The video may have no speech audio, or cookies may be needed for this site.")
+    try:
+        from openai import AsyncOpenAI
+    except ImportError:
+        raise RuntimeError("openai package not installed.")
+    client = AsyncOpenAI(base_url=OLLAMA_BASE_URL, api_key="ollama")
+    response = await client.chat.completions.create(
+        model=OLLAMA_MODEL,
+        # Reasoning models spend a large chunk of this "thinking" before
+        # writing the answer — a full video transcript needs ~15-20k tokens
+        # of headroom, not the 2k that's fine for a short text snippet.
+        max_tokens=20000,
+        messages=[{"role": "user", "content": RECIPE_PROMPT.format(transcript=transcript)}],
+    )
+    raw = (response.choices[0].message.content or "").strip()
+    raw = raw.replace("```json", "").replace("```", "").strip()
+    print(f"[llm] Response length: {len(raw)} chars, starts with: {raw[:80]!r}")
+    if not raw:
+        raise RuntimeError("LLM returned an empty response. The transcript may not contain a recipe.")
     return json.loads(raw)
