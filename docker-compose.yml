@@ -2,6 +2,9 @@ services:
   reelmeals:
     build: .
     container_name: reelmeals-v4
+    labels:
+      kuma.reelmeals-v4.http.name: "ReelMeals v4"
+      kuma.reelmeals-v4.http.url: "http://10.10.10.13:8092/"
     restart: unless-stopped
     ports:
       - "8092:8000"
@@ -13,6 +16,9 @@ services:
       # Whisper (infrastructure — stays in .env)
       - WHISPER_MODEL=${WHISPER_MODEL:-small}
       - WHISPER_DEVICE=${WHISPER_DEVICE:-cpu}
+      # Local LLM (infrastructure — stays in .env)
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://10.10.10.226:11434/v1}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-gemma4:12b}
       # Session signing key (generate once, keep secret)
       - SECRET_KEY=${SECRET_KEY:-change-me-to-a-random-string}
       # Auth modes
@@ -27,11 +33,14 @@ services:
       - OIDC_SCOPES=${OIDC_SCOPES:-openid profile email}
       # Registration control
       - ALLOW_REGISTRATION=${ALLOW_REGISTRATION:-true}
+      # Transcript ingest from trusted services (e.g. RabbitHole)
+      - INGEST_API_KEY=${INGEST_API_KEY:-}
+      - INGEST_USER_ID=${INGEST_USER_ID:-}
     deploy:
       resources:
         limits:
           cpus: "1.0"
-          memory: 4G
+          memory: 1G
 
 volumes:
   reelmeals-whisper:

@@ -55,6 +55,11 @@ class ExtractRequest(BaseModel):
 class PushRequest(BaseModel):
     slug: str
 
+class TranscriptIngestRequest(BaseModel):
+    url: str
+    title: str = ""
+    transcript: str
+
 class SettingsUpdate(BaseModel):
     llm_provider: str | None = None
     anthropic_api_key: str | None = None
@@ -211,6 +216,7 @@ async def get_config(request: Request):
         "llm_configured":  bool(
             (settings.get("llm_provider") == "anthropic" and settings.get("anthropic_api_key"))
             or (settings.get("llm_provider") == "openai" and settings.get("openai_api_key"))
+            or (settings.get("llm_provider") == "local")
         ),
         "version":         APP_VERSION,
     }
@@ -396,6 +402,41 @@ async def _run_and_save(job_id: str, url: str, user_id: str,
             thumbnail_bytes=job.get("thumbnail"),
         )
         job["slug"] = slug
+
+
+# ── Transcript ingest (server-to-server, e.g. from RabbitHole) ────────────────
+@app.post("/api/ingest/transcript")
+async def ingest_transcript(req: TranscriptIngestRequest, request: Request):
+    """
+    Accept a pre-fetched transcript from a trusted service and extract a
+    recipe directly, skipping the yt-dlp download + Whisper transcription
+    steps. Authenticated via a shared API key header, not a user session.
+    """
+    expected_key = os.getenv("INGEST_API_KEY", "")
+    provided_key = request.headers.get("x-api-key", "")
+    if not expected_key or not secrets.compare_digest(provided_key, expected_key):
+        raise HTTPException(401, "Invalid or missing API key")
+
+    target_user = os.getenv("INGEST_USER_ID", "")
+    if not target_user or not users.get_user(target_user):
+        raise HTTPException(500, "INGEST_USER_ID is not configured on the server")
+
+    transcript = req.transcript.strip()
+    if len(transcript) < 10:
+        raise HTTPException(400, "Transcript is empty or too short")
+
+    existing = recipes.find_by_url(target_user, req.url)
+    if existing:
+        return {"success": True, "slug": existing["slug"], "cached": True}
+
+    settings = users.get_settings(target_user)
+    try:
+        recipe = await pipeline._parse_recipe(transcript, settings)
+    except Exception as e:
+        raise HTTPException(502, f"Recipe extraction failed: {e}")
+
+    slug = recipes.save_recipe(target_user, recipe, source_url=req.url)
+    return {"success": True, "slug": slug, "cached": False}
 
 
 # ── Status / thumbnail ─────────────────────────────────────────────────────────

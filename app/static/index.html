@@ -372,6 +372,7 @@
               <select id="set-llm-provider" class="field-input" style="cursor:pointer">
                 <option value="anthropic">Anthropic (Claude)</option>
                 <option value="openai">OpenAI (GPT)</option>
+                <option value="local">Local (Homelab Ollama)</option>
               </select>
             </div>
             <div class="settings-grid">
@@ -581,7 +582,12 @@
       const cfg = await fetch('/api/config').then(r => r.json());
       appConfig = cfg;
       document.getElementById('settings-version').textContent = 'ReelMeals v' + (cfg.version || '4');
-      showView('extract');
+      const deepLinkSlug = new URLSearchParams(window.location.search).get('recipe');
+      if (deepLinkSlug) {
+        openRecipe(deepLinkSlug);
+      } else {
+        showView('extract');
+      }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
