@@ -6,10 +6,12 @@ import base64
 import io
 import json
 import os
+import re
 import secrets
 import uuid
 import zipfile
 
+import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -404,6 +406,28 @@ async def _run_and_save(job_id: str, url: str, user_id: str,
         job["slug"] = slug
 
 
+_YOUTUBE_ID_RE = re.compile(
+    r"(?:youtube\.com/watch\?v=|youtube\.com/shorts/|youtu\.be/)([\w-]{11})"
+)
+
+
+async def _fetch_youtube_thumbnail(url: str) -> bytes | None:
+    """Best-effort static thumbnail fetch — used when there's no downloaded
+    video to pull a frame from (e.g. transcript-only ingest)."""
+    m = _YOUTUBE_ID_RE.search(url)
+    if not m:
+        return None
+    video_id = m.group(1)
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(f"https://img.youtube.com/vi/{video_id}/hqdefault.jpg")
+            if resp.status_code == 200:
+                return resp.content
+    except Exception as e:
+        print(f"[ingest] Thumbnail fetch failed (non-fatal): {e}")
+    return None
+
+
 # ── Transcript ingest (server-to-server, e.g. from RabbitHole) ────────────────
 @app.post("/api/ingest/transcript")
 async def ingest_transcript(req: TranscriptIngestRequest, request: Request):
@@ -435,7 +459,9 @@ async def ingest_transcript(req: TranscriptIngestRequest, request: Request):
     except Exception as e:
         raise HTTPException(502, f"Recipe extraction failed: {e}")
 
-    slug = recipes.save_recipe(target_user, recipe, source_url=req.url)
+    thumbnail_bytes = await _fetch_youtube_thumbnail(req.url)
+    slug = recipes.save_recipe(target_user, recipe, source_url=req.url,
+                               thumbnail_bytes=thumbnail_bytes)
     return {"success": True, "slug": slug, "cached": False}
 
 
