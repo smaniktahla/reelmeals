@@ -5,8 +5,11 @@ Pipeline — download video → extract thumbnail → transcribe → AI parse re
 import asyncio
 import json
 import os
+import shutil
 import subprocess
 import tempfile
+
+import httpx
 
 import anthropic
 import yt_dlp
@@ -48,26 +51,39 @@ def _update(job_id: str, step: str, progress: int):
 # ── Full pipeline ──────────────────────────────────────────────────────────────
 async def run_pipeline(job_id: str, url: str, cookies_path: str = "",
                        llm_settings: dict | None = None):
-    """Run the full extraction pipeline. llm_settings = user's LLM config."""
+    """Run the full extraction pipeline. llm_settings = user's LLM config.
+
+    Source material = video transcript + post caption + top comments. Any of
+    them may carry the recipe, so a failed video download no longer kills the
+    job as long as the caption/comments (metadata) could still be fetched.
+    """
     try:
         with tempfile.TemporaryDirectory() as tmpdir:
             _update(job_id, "Downloading video…", 10)
-            video_path = await _download_video(url, tmpdir, cookies_path)
+            video_path, info = await _fetch_media(url, tmpdir, cookies_path)
 
-            _update(job_id, "Extracting thumbnail…", 30)
-            thumbnail = await _extract_thumbnail(video_path, tmpdir)
-            if thumbnail:
-                jobs[job_id]["thumbnail"] = thumbnail
+            transcript = ""
+            if video_path:
+                _update(job_id, "Extracting thumbnail…", 30)
+                thumbnail = await _extract_thumbnail(video_path, tmpdir)
+                if thumbnail:
+                    jobs[job_id]["thumbnail"] = thumbnail
 
-            _update(job_id, "Extracting audio…", 45)
-            audio_path = await _extract_audio(video_path, tmpdir)
+                _update(job_id, "Extracting audio…", 45)
+                try:
+                    audio_path = await _extract_audio(video_path, tmpdir)
+                    _update(job_id, "Transcribing audio…", 55)
+                    loop = asyncio.get_event_loop()
+                    transcript = await loop.run_in_executor(None, _transcribe, audio_path)
+                except RuntimeError as e:
+                    # No audio track etc. — the caption/comments may still have it
+                    print(f"[pipeline] Audio step skipped: {e}")
+            elif info.get("thumbnail"):
+                jobs[job_id]["thumbnail"] = await _fetch_url_bytes(info["thumbnail"])
 
-            _update(job_id, "Transcribing audio…", 55)
-            loop = asyncio.get_event_loop()
-            transcript = await loop.run_in_executor(None, _transcribe, audio_path)
-
+            source_text = build_source_text(info, transcript)
             _update(job_id, "Extracting recipe with AI…", 80)
-            recipe = await _parse_recipe(transcript, llm_settings or {})
+            recipe = await _parse_recipe(source_text, llm_settings or {})
 
             jobs[job_id].update({
                 "status":   "done",
@@ -78,12 +94,92 @@ async def run_pipeline(job_id: str, url: str, cookies_path: str = "",
             })
 
     except Exception as exc:
-        jobs[job_id].update({"status": "error", "error": str(exc), "step": "Failed"})
+        jobs[job_id].update({"status": "error", "error": _friendly_error(url, cookies_path, exc),
+                             "step": "Failed"})
         print(f"[pipeline] Error for {job_id}: {exc}")
 
 
-# ── Video download ─────────────────────────────────────────────────────────────
-async def _download_video(url: str, tmpdir: str, cookies_path: str = "") -> str:
+# ── Error hints ────────────────────────────────────────────────────────────────
+def _cookie_names(cookies_path: str, domain_part: str) -> set[str]:
+    names: set[str] = set()
+    try:
+        with open(cookies_path) as f:
+            for line in f:
+                parts = line.rstrip("\n").split("\t")
+                if len(parts) >= 7 and domain_part in parts[0]:
+                    names.add(parts[5])
+    except OSError:
+        pass
+    return names
+
+
+def _friendly_error(url: str, cookies_path: str, exc: Exception) -> str:
+    msg = str(exc)
+    if "instagram.com" in url and ("login required" in msg or "not available" in msg):
+        if "sessionid" not in _cookie_names(cookies_path, "instagram.com"):
+            return ("Instagram needs a logged-in session. The cookies saved in Settings have no "
+                    "Instagram 'sessionid' cookie — export cookies.txt again while logged in to "
+                    "instagram.com (cookies from a logged-out browser or from facebook.com alone "
+                    "won't work) and paste it into Settings. Original error: " + msg)
+    return msg
+
+
+# ── Caption / comments → text ──────────────────────────────────────────────────
+MAX_COMMENTS = 40
+MAX_COMMENT_CHARS = 6000
+
+
+def build_source_text(info: dict, transcript: str) -> str:
+    """Combine caption, comments and transcript into one labelled blob."""
+    parts = []
+    title = (info.get("title") or "").strip()
+    desc = (info.get("description") or "").strip()
+    if desc or title:
+        # IG/TikTok titles are usually just a truncated caption — skip if redundant
+        head = desc if desc.startswith(title[:40]) or not title else f"{title}\n{desc}"
+        parts.append("=== POST CAPTION / DESCRIPTION ===\n" + head)
+
+    comments = info.get("comments") or []
+    if comments:
+        # Creator's own comments first (recipes are often pinned/posted there),
+        # then the most-liked. Keep the long ones: recipes are long.
+        def rank(c):
+            return (not c.get("author_is_uploader"), -(c.get("like_count") or 0), -len(c.get("text") or ""))
+        lines, used = [], 0
+        for c in sorted(comments, key=rank)[:MAX_COMMENTS]:
+            text = (c.get("text") or "").strip()
+            if not text or used + len(text) > MAX_COMMENT_CHARS:
+                continue
+            who = "CREATOR" if c.get("author_is_uploader") else (c.get("author") or "viewer")
+            lines.append(f"[{who}] {text}")
+            used += len(text)
+        if lines:
+            parts.append("=== COMMENTS ===\n" + "\n---\n".join(lines))
+
+    if transcript and transcript.strip():
+        parts.append("=== SPOKEN TRANSCRIPT ===\n" + transcript.strip())
+    return "\n\n".join(parts)
+
+
+async def _fetch_url_bytes(url: str) -> bytes | None:
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=True) as client:
+            r = await client.get(url)
+            if r.status_code == 200:
+                return r.content
+    except Exception as e:
+        print(f"[thumbnail] fetch failed (non-fatal): {e}")
+    return None
+
+
+# ── Video download + metadata ──────────────────────────────────────────────────
+async def _fetch_media(url: str, tmpdir: str, cookies_path: str = "") -> tuple[str | None, dict]:
+    """Return (video_path | None, info). info carries caption + comments.
+
+    Tries the full download (with comments). If that fails, falls back to a
+    metadata-only fetch so a recipe in the caption/comments can still be used.
+    Raises the original download error if neither yields anything.
+    """
     out_tmpl = os.path.join(tmpdir, "video.%(ext)s")
     opts = {
         "format":              "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
@@ -91,22 +187,41 @@ async def _download_video(url: str, tmpdir: str, cookies_path: str = "") -> str:
         "quiet":               True,
         "no_warnings":         True,
         "merge_output_format": "mp4",
+        "getcomments":         True,
+        # YouTube: max_comments,max_parents,max_replies,max_replies_per_thread
+        "extractor_args":      {"youtube": {"max_comments": [f"{MAX_COMMENTS}", f"{MAX_COMMENTS}", "0", "0"]}},
     }
+    # yt-dlp rewrites its cookiefile on exit — work on a copy so the user's
+    # saved cookies are never clobbered.
     if cookies_path and os.path.exists(cookies_path) and os.path.getsize(cookies_path) > 0:
-        opts["cookiefile"] = cookies_path
+        tmp_cookies = os.path.join(tmpdir, "cookies.txt")
+        shutil.copyfile(cookies_path, tmp_cookies)
+        opts["cookiefile"] = tmp_cookies
 
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, lambda: _ydl_download(opts, url))
+    try:
+        info = await loop.run_in_executor(None, lambda: _ydl_extract(opts, url, download=True))
+    except Exception as dl_err:
+        print(f"[pipeline] Download failed, trying metadata only: {dl_err}")
+        meta_opts = {k: v for k, v in opts.items() if k != "format"}
+        meta_opts["ignore_no_formats_error"] = True
+        try:
+            info = await loop.run_in_executor(None, lambda: _ydl_extract(meta_opts, url, download=False))
+        except Exception:
+            raise dl_err
+        if not (info.get("description") or info.get("comments")):
+            raise dl_err
+        return None, info
 
     for fname in os.listdir(tmpdir):
         if fname.startswith("video."):
-            return os.path.join(tmpdir, fname)
+            return os.path.join(tmpdir, fname), info
     raise RuntimeError("yt-dlp did not produce a video file")
 
 
-def _ydl_download(opts: dict, url: str):
+def _ydl_extract(opts: dict, url: str, download: bool) -> dict:
     with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([url])
+        return ydl.sanitize_info(ydl.extract_info(url, download=download)) or {}
 
 
 # ── Thumbnail ──────────────────────────────────────────────────────────────────
@@ -158,7 +273,7 @@ def _transcribe(audio_path: str) -> str:
 
 
 # ── LLM recipe parsing ────────────────────────────────────────────────────────
-RECIPE_PROMPT = """You are a precise recipe extraction assistant. Given a transcript from a cooking video, extract the complete recipe and return it as valid JSON only — no markdown fences, no preamble, no explanation.
+RECIPE_PROMPT = """You are a precise recipe extraction assistant. Given source material from a cooking video post — any of: the post caption, viewer/creator comments, and a spoken-audio transcript — extract the complete recipe and return it as valid JSON only — no markdown fences, no preamble, no explanation.
 
 Return this exact structure:
 {{
@@ -184,8 +299,10 @@ Rules:
 - unit: empty string if not applicable
 - step time: estimated minutes (0 if instantaneous)
 - Include ALL ingredients and ALL steps mentioned
+- The recipe may be written in the caption or a comment (often by the CREATOR) rather than spoken. Prefer exact written quantities over approximate spoken ones, and merge the sources into one recipe
+- Ignore social-media noise (calls to action, "comment X for the recipe", hashtags, unrelated chatter)
 
-Transcript:
+Source material:
 {transcript}"""
 
 
@@ -203,7 +320,7 @@ async def _parse_anthropic(transcript: str, llm_settings: dict) -> dict:
     if not api_key:
         raise RuntimeError("Anthropic API key not configured. Go to Settings to add it.")
     if not transcript or len(transcript.strip()) < 10:
-        raise RuntimeError(f"Transcript is empty or too short ({len(transcript)} chars). The video may have no speech audio, or cookies may be needed for this site.")
+        raise RuntimeError(f"Transcript is empty or too short ({len(transcript)} chars). The video may have no speech audio and no recipe in its caption/comments, or cookies may be needed for this site.")
     client = anthropic.Anthropic(api_key=api_key)
     message = client.messages.create(
         model="claude-sonnet-4-6",
@@ -240,7 +357,7 @@ async def _parse_openai(transcript: str, llm_settings: dict) -> dict:
 
 async def _parse_local(transcript: str, llm_settings: dict) -> dict:
     if not transcript or len(transcript.strip()) < 10:
-        raise RuntimeError(f"Transcript is empty or too short ({len(transcript)} chars). The video may have no speech audio, or cookies may be needed for this site.")
+        raise RuntimeError(f"Transcript is empty or too short ({len(transcript)} chars). The video may have no speech audio and no recipe in its caption/comments, or cookies may be needed for this site.")
     try:
         from openai import AsyncOpenAI
     except ImportError:

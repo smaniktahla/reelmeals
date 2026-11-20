@@ -336,9 +336,8 @@ async def get_recipe_thumbnail(slug: str, request: Request):
 
 
 # ── Extract route ──────────────────────────────────────────────────────────────
-@app.post("/api/extract")
-async def extract(req: ExtractRequest, request: Request, background_tasks: BackgroundTasks):
-    user_id = auth.require_user(request)
+def _start_extraction(user_id: str, url: str, background_tasks: BackgroundTasks) -> dict:
+    """Shared by /api/extract (session auth) and /api/share (API-key auth)."""
     settings = users.get_settings(user_id)
 
     # Check LLM is configured
@@ -349,7 +348,7 @@ async def extract(req: ExtractRequest, request: Request, background_tasks: Backg
         return {"error": "OpenAI API key not configured. Go to Settings."}
 
     # Check if already in library
-    existing = recipes.find_by_url(user_id, req.url)
+    existing = recipes.find_by_url(user_id, url)
     if existing:
         slug = existing["slug"]
         entry = recipes.load_recipe(user_id, slug)
@@ -381,14 +380,77 @@ async def extract(req: ExtractRequest, request: Request, background_tasks: Backg
         "error":     None,
         "cached":    False,
         "user_id":   user_id,
-        "source_url": req.url,
+        "source_url": url,
     }
 
     cookies_path = users.get_cookies_path(user_id)
     background_tasks.add_task(
-        _run_and_save, job_id, req.url, user_id, cookies_path, settings
+        _run_and_save, job_id, url, user_id, cookies_path, settings
     )
     return {"job_id": job_id, "from_cache": False}
+
+
+@app.post("/api/extract")
+async def extract(req: ExtractRequest, request: Request, background_tasks: BackgroundTasks):
+    user_id = auth.require_user(request)
+    return _start_extraction(user_id, req.url, background_tasks)
+
+
+# ── Share target (Android "Share to…" via HTTP Shortcuts etc.) ─────────────────
+_URL_RE = re.compile(r"https?://[^\s<>\"']+")
+
+
+def _share_user(request: Request) -> str:
+    """API-key auth (same INGEST_API_KEY as the ingest endpoint). Key may be
+    sent as X-API-Key header or ?key= so a plain share shortcut can use it."""
+    expected = os.getenv("INGEST_API_KEY", "")
+    provided = request.headers.get("x-api-key", "") or request.query_params.get("key", "")
+    if not expected or not secrets.compare_digest(provided, expected):
+        raise HTTPException(401, "Invalid or missing API key")
+    target = os.getenv("INGEST_USER_ID", "")
+    if not target or not users.get_user(target):
+        raise HTTPException(500, "INGEST_USER_ID is not configured on the server")
+    return target
+
+
+@app.post("/api/share")
+async def share(request: Request, background_tasks: BackgroundTasks):
+    """Fire-and-forget extraction. Accepts JSON {"url"|"text": ...}, a form
+    post, or a raw text body. Share sheets often send "caption text + URL", so
+    the first http(s) URL found is used."""
+    user_id = _share_user(request)
+    raw = ""
+    ctype = request.headers.get("content-type", "")
+    try:
+        if "json" in ctype:
+            body = await request.json()
+            raw = " ".join(str(body.get(k, "")) for k in ("url", "text", "link") if isinstance(body, dict))
+        else:
+            body = (await request.body()).decode("utf-8", "ignore")
+            if "urlencoded" in ctype:
+                from urllib.parse import parse_qs
+                q = parse_qs(body)
+                raw = " ".join(v for k in ("url", "text", "link") for v in q.get(k, [])) or body
+            else:
+                raw = body
+    except Exception:
+        raise HTTPException(400, "Could not read request body")
+    raw = raw.strip() or request.query_params.get("url", "")
+    m = _URL_RE.search(raw)
+    if not m:
+        raise HTTPException(400, "No http(s) URL found in the shared content")
+    url = m.group(0).rstrip(".,;)")
+
+    result = _start_extraction(user_id, url, background_tasks)
+    if "error" in result:
+        raise HTTPException(500, result["error"])
+    if result.get("from_cache"):
+        result["message"] = "Already in your library"
+    else:
+        result["message"] = "Queued — recipe will appear in your Library in a few minutes"
+    result["url"] = url
+    result["status_url"] = f"/api/status/{result['job_id']}"
+    return result
 
 
 async def _run_and_save(job_id: str, url: str, user_id: str,
