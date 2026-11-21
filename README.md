@@ -98,3 +98,24 @@ On first run, v4 automatically imports your v3 `cache.json` recipes into the fir
 - **[yt-dlp](https://github.com/yt-dlp/yt-dlp)** — video download
 - **[Anthropic Claude](https://www.anthropic.com/)** or **[OpenAI](https://openai.com/)** — recipe parsing
 - **[Tandoor](https://tandoor.dev/)** / **[Mealie](https://mealie.io/)** — optional recipe manager sync
+
+## Share target (Android "Share to…")
+
+`POST /api/share` queues an extraction without opening the web UI. Auth is the
+same `INGEST_API_KEY` used by the ingest endpoint (header `X-API-Key`, or `?key=`),
+and recipes land in the `INGEST_USER_ID` user's library.
+
+It accepts JSON (`{"url": ...}` or `{"text": ...}`), form-encoded, or a raw text
+body; if the shared text contains a caption plus a link, the first http(s) URL is used.
+
+Example HTTP Shortcuts / Tasker setup: POST `http://<host>:8092/api/share`,
+header `X-API-Key: <key>`, body = the shared text. Poll `/api/status/<job_id>`
+if you want progress.
+
+## What gets extracted
+
+Recipes are built from the spoken transcript **and** the post caption and top
+comments (creator comments first), so recipes written in a caption or comment
+are captured even when the video itself has no speech or can't be downloaded.
+Instagram/Facebook still need a logged-in cookies.txt in Settings (it must
+contain Instagram's `sessionid` cookie).
